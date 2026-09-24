@@ -1,0 +1,118 @@
+# Experiment configuration: multi-task semantic segmentation + monocular depth estimation.
+# One experiment = one versioned config file (copy this file to configs/<experiment>.yaml per run).
+#
+# Key names inside each section mirror the argparse flags of source/utils/config.py
+# (e.g. optimization.optimizer_lr <-> --optimizer_lr) so a loader can feed them straight into the
+# existing code. Keys marked [NEW] are required by CLAUDE.md but are not consumed by the code yet.
+# Keys marked [OPEN] are open decisions from CLAUDE.md: the value is the template default, not a tuned choice.
+#
+# Environment variables ($VAR / ${VAR}) are expanded when the file is loaded; nothing is hardcoded.
+
+experiment:
+  # Run name shown in W&B and used to build the output sub-directory.
+  name: baseline_semseg
+  # [NEW] Fixed and logged with every run. Seeds are never changed between compared variants.
+  seed: 42
+  # Tasks trained by this run: [semseg], [depth] or [semseg, depth].
+  tasks: [semseg]
+  # Checkpoint path to resume from, or null.
+  resume: null
+
+# --- Paths ------------------------------------------------------------------------------------
+paths:
+  # Root of the dataset (contains train/ val/ test/). Read from the environment, never hardcoded.
+  dataset_root: ${DATASET_ROOT}
+  # Root for checkpoints, logs and predictions. Must be outside the repository.
+  # [NEW] The run writes to <output_dir>/<experiment.name>_seed<seed>_<timestamp> and never overwrites
+  # a previous run (the current train.py wipes log_dir at start; that must change before using this).
+  output_dir: ${SAVEDIR}
+
+# --- Dataset ----------------------------------------------------------------------------------
+data:
+  dataset: miniscapes           # Synscapes subset; split (20000/2500/2500) is fixed by the directory layout
+  workers: 16
+  workers_validation: 4
+  batch_size_validation: 8
+
+# --- Depth ------------------------------------------------------------------------------------
+# Values come from DatasetMiniscapes (depth stored as 8-bit disparity between these bounds).
+# [OPEN] Confirm on the actual data. Used for the metric mask (gt finite, > 0, <= max_meters)
+# and as the depth range of the adaptive bins, so there is a single source of truth.
+depth:
+  min_meters: 4.0
+  max_meters: 300.0
+
+# --- Model ------------------------------------------------------------------------------------
+model:
+  # Architecture -> experiment (all share the same encoder, split and data pipeline):
+  #   deeplabv3p            + tasks [semseg] or [depth]  : 0. single-task baselines
+  #   deeplabv3p            + tasks [semseg, depth]      : 1. joint (shared encoder/ASPP/decoder, n+1 channels)
+  #   deeplabv3p_multitask  + tasks [semseg, depth]      : 2. branched (shared encoder, per-task ASPP + decoder)
+  #   adaptive_depth        + tasks [depth]              : 3. depth as classification with adaptive bins
+  model_name: deeplabv3p
+  model_encoder_name: resnet18  # resnet18 | resnet34
+  pretrained: false             # [OPEN] ImageNet weights; keep identical across compared runs
+
+  # Task 3 (adaptive bins). All configurable, none hardcoded in the model.
+  num_bins: 256                 # [OPEN] the current code requires sqrt(num_bins) to be an integer
+  num_heads: 8                  # attention heads of the transformer blocks
+  expansion: 2                  # MLP expansion in the transformer blocks
+  num_transformer_layers: 2
+  # [NEW] Choice of attention module for the bin predictor.
+  attention_module: transformer
+
+# --- Optimization -----------------------------------------------------------------------------
+optimization:
+  num_epochs: 10
+  batch_size: 16
+  optimizer: adam               # sgd | adam
+  optimizer_lr: 0.0001
+  optimizer_momentum: 0.9       # sgd only
+  optimizer_weight_decay: 0.001
+  optimizer_float_16: false
+  lr_scheduler: poly
+  lr_scheduler_power: 0.9
+
+# --- Loss -------------------------------------------------------------------------------------
+loss:
+  # [OPEN] Weighted sum of the task losses; per-task losses are always logged separately.
+  loss_weight_semseg: 0.5
+  loss_weight_depth: 0.5
+  # [NEW] SI-log loss: sqrt(mean(d^2) - lambda * mean(d)^2). AdaBins uses 0.85.
+  # The code's SILogLoss takes gamma = 1 - lambda (template default gamma=0.15 <-> lambda=0.85).
+  si_log_lambda: 0.85
+  si_log_eps: 1.0e-5            # clamp before log, never log(0)
+  # [NEW] Task 3 only: weight of the additional chamfer loss on the bin centers (AdaBins).
+  # Set to 0.0 to disable; verify the value against the paper before enabling.
+  bin_chamfer_weight: 0.0
+
+# --- Metrics ----------------------------------------------------------------------------------
+metrics:
+  # [NEW] lambda for the reported SI-logRMSE (1.0 = fully scale invariant). Report it with the results.
+  si_log_lambda: 1.0
+  semseg_ignore_label: 255      # void pixels, excluded from mIoU
+
+# --- Augmentation -----------------------------------------------------------------------------
+augmentation:
+  aug_input_crop_size: 256      # [OPEN] training crop
+  aug_geom_scale_min: 1.0
+  aug_geom_scale_max: 1.0
+  aug_geom_tilt_max_deg: 0.0
+  aug_geom_wiggle_max_ratio: 0.0
+  aug_geom_reflect: false
+
+# --- Weights & Biases -------------------------------------------------------------------------
+wandb:
+  project: CVAIAC-Ex1           # same project name as the current train.py
+  entity: null                  # team/user name, or null for the default account
+  key_file: wandb.key           # file holding the API key; never commit a real key
+  mode: online                  # online | offline | disabled
+
+# --- Visualization ----------------------------------------------------------------------------
+visualization:
+  num_steps_visualization_first: 100
+  num_steps_visualization_interval: 1000
+  visualize_num_samples_in_batch: 8
+  visualize_img_grid_width: 8
+  observe_train_ids: [0, 100]
+  observe_valid_ids: [0, 100]

@@ -1,15 +1,16 @@
-# Requirements fit with Deep Learning AMI pytorch_p39 environment to avoid unnecessary up/downgrades
--f https://download.pytorch.org/whl/torch_stable.html
-torch==1.7.1+cu101
--f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.8.2+cu101
-pytorch-lightning==1.4.1
-torchmetrics==0.7.3
-boto3==1.17.15
-matplotlib==3.3.4
-protobuf==3.20.0
-numpy==1.19.5
-Pillow==8.1.0
-wandb==0.12.2
-test-tube>=0.7.3
-tqdm==4.57.0
+# Latest releases on PyPI as of 2026-09-19, pinned for reproducibility.
+# Requires Python >= 3.12 (numpy 2.5 needs it; matplotlib needs >= 3.11; torch, torchvision,
+# lightning and wandb need >= 3.10). The old "py39" environment cannot install this file.
+#
+# NOTE: torch from PyPI ships CUDA runtime libraries; check that the cluster GPU driver supports them.
+# If it does not, install torch/torchvision from the matching https://download.pytorch.org/whl/cuXXX index instead.
+torch==2.14.0
+torchvision==0.29.0
+pytorch-lightning==2.6.6
+wandb==0.30.0
+numpy==2.5.3
+Pillow==12.3.0
+matplotlib==3.11.2
+tqdm==4.70.1
+PyYAML==6.0.3
+pytest==9.1.1
