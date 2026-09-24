@@ -23,11 +23,11 @@
 # Python virtual environment on this cluster, created on giano and populated with
 # `pip3 install -r requirements.txt --no-cache-dir` (see the cluster instructions:
 # pip's default cache lives in the 400 MB home quota and fills it fast).
-VENV_DIR=/scratch.hpc/TODO_name.surname/venv
+VENV_DIR=/scratch.hpc/matteo.preda/industry/AI_in_industry/industry_venv
 
 # Absolute path to the ORIGINAL raw Synscapes root (contains img/ and meta/).
 # TODO: fill this in - it cannot be guessed.
-SYNSCAPES_ROOT=/TODO/path/to/synscapes
+SYNSCAPES_ROOT=/scratch.hpc/matteo.preda/industry/synscapes/Synscapes
 
 # Where the Miniscapes-formatted output is written. This MUST be under
 # /scratch.hpc/ (or another quota-exempt path): the 400 MB home quota cannot
@@ -37,7 +37,7 @@ SYNSCAPES_ROOT=/TODO/path/to/synscapes
 # cluster instructions being self-contradictory on this point. If it turns out
 # /scratch.hpc/ is NOT visible from compute nodes, this whole approach needs a
 # different output location (ask IT, or route through the shared home instead).
-OUTPUT_ROOT=/scratch.hpc/TODO_name.surname/miniscapes
+OUTPUT_ROOT=/scratch.hpc/matteo.preda/industry/synscapes/synscapes_processed
 
 # Split seed: fixed and logged (see preprocess_manifest.json in OUTPUT_ROOT after
 # the run). Change only if you deliberately want a different train/val/test split.
