@@ -14,3 +14,8 @@ matplotlib==3.11.2
 tqdm==4.70.1
 PyYAML==6.0.3
 pytest==9.1.1
+
+
+opencv-python-headless==5.0.0.93  
+imageio==2.37.4                   
+OpenEXR==3.5.0
