@@ -23,7 +23,7 @@
 # Python virtual environment on this cluster, created on giano and populated with
 # `pip3 install -r requirements.txt --no-cache-dir` (see the cluster instructions:
 # pip's default cache lives in the 400 MB home quota and fills it fast).
-VENV_DIR=/scratch.hpc/matteo.preda/industry/AI_in_industry/industry_venv
+VENV_DIR=/scratch.hpc/matteo.preda/industry/indus/venv
 
 # Absolute path to the ORIGINAL raw Synscapes root (contains img/ and meta/).
 # TODO: fill this in - it cannot be guessed.
