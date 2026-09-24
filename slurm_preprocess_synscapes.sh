@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=31G
-#SBATCH --partition=l40
+#SBATCH --partition=rtx2080
 #SBATCH --output=preprocess_synscapes_%j.log
 #SBATCH --error=preprocess_synscapes_%j.err
 #SBATCH --chdir=/scratch.hpc/matteo.preda
