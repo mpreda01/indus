@@ -104,7 +104,7 @@ trainer:
 wandb:
   mode: online                  # online | offline (sync later) | disabled (no W&B logger, local CSV only)
   project: AI_in_industry
-  entity: mpreda01                  # team/user name, or null for the default account
+  entity: null                  # team/user name, or null for the default account
   group: null                   # groups related runs (e.g. "joint" seeds) for comparison in the W&B UI
   tags: []
   notes: null
