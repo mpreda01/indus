@@ -19,6 +19,8 @@
 export DATASET_ROOT=/scratch.hpc/matteo.preda/industry/synscapes/synscapes_processed
 export SAVEDIR=/scratch.hpc/matteo.preda/industry/runs
 VENV_DIR=/scratch.hpc/matteo.preda/industry/indus/venv
+# The 400 MB home quota is full: keep matplotlib/torch caches on scratch.
+export XDG_CACHE_HOME=/scratch.hpc/matteo.preda/.cache
 
 cd "${SLURM_SUBMIT_DIR}"
 
