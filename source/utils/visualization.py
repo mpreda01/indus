@@ -196,3 +196,12 @@ def compose(
     # N x 3 x H * N_MODS x W
     vis = make_grid(vis, nrow=min(N, cfg.visualize_img_grid_width))
     return vis
+
+
+def to_pil_image(vis):
+    """
+    Float image tensor 3 x H x W in [0, 1] -> 8-bit PIL image. W&B (0.30) renders float tensors and arrays
+    as black images, so images must be handed over as uint8 / PIL.
+    """
+    vis = (vis.detach().cpu().float().clamp(0, 1) * 255).round().byte()
+    return Image.fromarray(vis.permute(1, 2, 0).numpy())

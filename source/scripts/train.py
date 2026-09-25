@@ -99,6 +99,7 @@ def build_loggers(cfg, run_info):
             offline=cfg.wandb_mode == 'offline',
         )
         wandb_logger.log_hyperparams({'run_info': run_info})
+        print(f'W&B run: {getattr(wandb_logger.experiment, "url", None)}')
         loggers.append(wandb_logger)
     return loggers
 

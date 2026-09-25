@@ -37,3 +37,15 @@ def test_masked_depth_loss_all_invalid_is_zero_with_gradient():
     loss = MaskedDepthRegressionLoss('l1')(pred, torch.zeros(1, 4, 4))
     loss.backward()
     assert loss.item() == 0.0 and torch.isfinite(pred.grad).all()
+
+
+def test_visualization_image_keeps_colors_in_wandb(monkeypatch):
+    """W&B renders float tensors as black images: the logged image must be 8-bit and keep its colors."""
+    import wandb
+    from source.utils.visualization import to_pil_image
+    monkeypatch.setenv('WANDB_MODE', 'offline')
+    vis = torch.zeros(3, 8, 8)
+    vis[:, :, :4] = torch.tensor([128, 64, 128]).view(3, 1, 1) / 255       # Cityscapes "road" color
+    logged = np.array(wandb.Image(to_pil_image(vis)).image)
+    assert logged[2, 1].tolist() == [128, 64, 128]
+    assert logged[2, 6].tolist() == [0, 0, 0]

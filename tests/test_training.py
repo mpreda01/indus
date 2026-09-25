@@ -17,6 +17,7 @@ def run_training(tiny_dataset, tmp_path, monkeypatch, *extra):
     monkeypatch.setenv('SAVEDIR', str(tmp_path / 'out'))
     argv = [
         '--config', CONFIG_PATH,
+        'experiment.tasks=[semseg, depth]',  # the repo config may describe another experiment
         'data.workers=0', 'data.workers_validation=0', 'data.batch_size_validation=2',
         'optimization.batch_size=4', 'optimization.num_epochs=2', 'optimization.optimizer_lr=0.001',
         'augmentation.aug_input_crop_size=64',
@@ -133,6 +134,8 @@ def test_wandb_offline_logging_and_visualization(tiny_dataset, tmp_path, monkeyp
         'optimization.num_epochs=1', 'trainer.test_after_fit=false',
         'visualization.num_steps_visualization_first=0', 'visualization.num_steps_visualization_interval=1',
         'visualization.observe_train_ids=[0]', 'visualization.observe_valid_ids=[1]')
+    import wandb
+    wandb.finish()  # the run file is written asynchronously; close the run before reading it
     logged = b''
     for folder, _, files in os.walk(os.path.join(run_dir, 'wandb')):
         for name in files:

@@ -54,7 +54,7 @@ model:
 
 # --- Optimization -----------------------------------------------------------------------------
 optimization:
-  num_epochs: 10
+  num_epochs: 50
   batch_size: 64
   optimizer: adam               # sgd | adam
   optimizer_lr: 0.0001
@@ -104,7 +104,7 @@ trainer:
 wandb:
   mode: online                  # online | offline (sync later) | disabled (no W&B logger, local CSV only)
   project: AI_in_industry
-  entity: null                  # team/user name, or null for the default account
+  entity: mpreda01                  # team/user name, or null for the default account
   group: null                   # groups related runs (e.g. "joint" seeds) for comparison in the W&B UI
   tags: []
   notes: null

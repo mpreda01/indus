@@ -12,7 +12,7 @@ from source.losses import CrossEntropyLoss, MaskedDepthRegressionLoss
 from source.utils.metrics import MetricsSemseg, MetricsDepth
 from source.utils.helpers import resolve_optimizer, resolve_dataset_class, resolve_model_class, resolve_lr_scheduler
 from source.utils.transforms import get_transforms
-from source.utils.visualization import compose
+from source.utils.visualization import compose, to_pil_image
 
 # Fixed order of the tasks: it defines the channel layout of models with a single output tensor
 # (joint architecture: first the semseg class logits, then the depth channel).
@@ -278,7 +278,7 @@ class ExperimentMultiTask(pl.LightningModule):
             semseg_color_map=self.semseg_class_colors,
             semseg_ignore_label=self.semseg_ignore_label,
         )
-        self.wandb_logger().log_image(tag, [vis.cpu()], step=self.global_step, caption=[tag])
+        self.wandb_logger().log_image(tag, [to_pil_image(vis)], step=self.global_step, caption=[tag])
 
     def visualize_histograms(self, batch, y_hat_depth):
         import wandb
