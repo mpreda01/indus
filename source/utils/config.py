@@ -1,8 +1,20 @@
-import argparse
-import os
-import json
+"""
+YAML based configuration of a training run.
 
-from source.datasets.definitions import SPLIT_VALID, SPLIT_TEST
+One experiment = one complete YAML file (see ``config.yaml`` in the repository root). The file is grouped in
+sections for readability; the loader validates it against ``SCHEMA`` below (unknown, missing or badly typed keys
+are errors) and flattens it into a single ``argparse.Namespace`` so the rest of the code reads ``cfg.optimizer_lr``,
+``cfg.tasks``, ... Individual values can be overridden from the command line with ``section.key=value``.
+"""
+import argparse
+import json
+import os
+import re
+import sys
+
+import yaml
+
+from source.datasets.definitions import MOD_SEMSEG, MOD_DEPTH
 
 
 def expandpath(path):
@@ -11,7 +23,7 @@ def expandpath(path):
 
 def str2bool(v):
     if isinstance(v, bool):
-       return v
+        return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
@@ -20,121 +32,129 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def command_line_parser():
-    parser = argparse.ArgumentParser(
-        add_help=True,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-
-    parser.add_argument(
-        '--name', type=str, required=True, help='Name for your run to easier identify it.')
-    parser.add_argument(
-        '--log_dir', type=expandpath, required=True, help='Place for artifacts and logs')
-    parser.add_argument(
-        '--dataset_root', type=expandpath, required=True, help='Path to dataset')
-    parser.add_argument(
-        '--resume', type=str, default=None, help='Resume training from checkpoint: path to a valid file')
-
-    parser.add_argument(
-        '--prepare_submission', type=str2bool, default=False,
-        help='Run best model on RGB test data, pack the archive with predictions for the grader')
-
-    parser.add_argument(
-        '--num_epochs', type=int, default=16, help='Number of training epochs')
-    parser.add_argument(
-        '--batch_size', type=int, default=4, help='Number of samples in a batch for training')
-    parser.add_argument(
-        '--batch_size_validation', type=int, default=8, help='Number of samples in a batch for validation')
-
-    parser.add_argument(
-        '--num_bins', type=int, default=256, help='Task3: Number of bins for adaptive depth, be sure its sqrt is an int!')
-    parser.add_argument(
-        '--num_heads', type=int, default=8, help='Task3: Number of heads for self attention')
-    parser.add_argument(
-        '--expansion', type=int, default=2, help='Task3: Expansion in inverse bottleneck in MLP')
-    parser.add_argument(
-        '--num_transformer_layers', type=int, default=2, help='Task3: Number of layer for transformer layer')
-    
-    parser.add_argument(
-        '--aug_input_crop_size', type=int, default=256, help='Training crop size')
-    parser.add_argument(
-        '--aug_geom_scale_min', type=float, default=1.0, help='Augmentation: lower bound of scale')
-    parser.add_argument(
-        '--aug_geom_scale_max', type=float, default=1.0, help='Augmentation: upper bound of scale')
-    parser.add_argument(
-        '--aug_geom_tilt_max_deg', type=float, default=0.0, help='Augmentation: maximum rotation degree')
-    parser.add_argument(
-        '--aug_geom_wiggle_max_ratio', type=float, default=0.0,
-        help='Augmentation: perspective warping level between 0 and 1')
-    parser.add_argument(
-        '--aug_geom_reflect', type=str2bool, default=False, help='Augmentation: Random horizontal flips')
-
-    parser.add_argument(
-        '--optimizer', type=str, default='sgd', choices=['sgd', 'adam'], help='Type of optimizer')
-    parser.add_argument(
-        '--optimizer_lr', type=float, default=0.01, help='Learning rate at start of training')
-    parser.add_argument(
-        '--optimizer_momentum', type=float, default=0.9, help='Optimizer momentum')
-    parser.add_argument(
-        '--optimizer_weight_decay', type=float, default=0.001, help='Optimizer weight decay')
-    parser.add_argument(
-        '--optimizer_float_16', type=str2bool, default=False, help='Optimizer to use float16 precision')
-
-    parser.add_argument(
-        '--lr_scheduler', type=str, default='poly', choices=['poly'], help='Type of learning rate scheduler')
-    parser.add_argument(
-        '--lr_scheduler_power', type=float, default=0.9, help='Poly learning rate power')
-
-    parser.add_argument(
-        '--dataset', type=str, default='miniscapes', choices=['miniscapes'], help='Dataset name')
-    
-    parser.add_argument(
-        '--tasks', type=str, nargs='+', default=['semseg'], choices=['depth', 'semseg'], help='Tasks to train on')
-
-    parser.add_argument(
-        '--model_name', type=str, default='deeplabv3p',
-        choices=['deeplabv3p', 'deeplabv3p_multitask', 'adaptive_depth'],
-        help='CNN architecture')
-    parser.add_argument(
-        '--model_encoder_name', type=str, default='resnet18', choices=['resnet18', 'resnet34'],
-        help='CNN architecture encoder')
-    parser.add_argument(
-        '--pretrained', type=str2bool, default=False, help='Use ImageNet pretrained weights')
-    
-    parser.add_argument(
-        '--loss_weight_semseg', type=float, default=0.5, help='Weight of semantic segmentation loss')
-    parser.add_argument(
-        '--loss_weight_depth', type=float, default=0.5, help='Weight of depth estimation loss')
-
-    parser.add_argument(
-        '--workers', type=int, default=16, help='Number of worker threads fetching training data')
-    parser.add_argument(
-        '--workers_validation', type=int, default=4, help='Number of worker threads fetching validation data')
-
-    parser.add_argument(
-        '--num_steps_visualization_first', type=int, default=100, help='Visualization: first time step')
-    parser.add_argument(
-        '--num_steps_visualization_interval', type=int, default=1000, help='Visualization: interval in steps')
-    parser.add_argument(
-        '--visualize_num_samples_in_batch', type=int, default=8, help='Visualization: max number of samples in batch')
-    parser.add_argument(
-        '--visualize_img_grid_width', type=int, default=8, help='Visualization: number of samples per row')
-    parser.add_argument(
-        '--observe_train_ids', type=json.loads, default='[0,100]', help='Visualization: train IDs')
-    parser.add_argument(
-        '--observe_valid_ids', type=json.loads, default='[0,100]', help='Visualization: validation IDs')
-
-    cfg = parser.parse_args()
-
-    print(json.dumps(cfg.__dict__, indent=4, sort_keys=True))
-
-    return cfg
+# Type specifications used by SCHEMA. A spec is (accepted types, allowed choices or None).
+_STR = ((str,), None)
+_STR_OPT = ((str, type(None)), None)
+_INT = ((int,), None)
+_INT_OPT = ((int, type(None)), None)
+_FLOAT = ((int, float), None)
+_NUM_OPT = ((int, float, type(None)), None)
+_BOOL = ((bool,), None)
+_LIST_STR = ((list,), None)
+_LIST_INT = ((list,), None)
 
 
+def _choice(*choices):
+    return (str,), choices
+
+
+# section -> key -> spec. Every key is required in every experiment file (no hidden defaults).
+SCHEMA = {
+    'experiment': {
+        'name': _STR,                   # run name, part of the output directory and the W&B run name
+        'seed': _INT,                   # seeds python, numpy, torch and the dataloader workers
+        'tasks': _LIST_STR,             # subset of [semseg, depth]
+        'resume': _STR_OPT,             # checkpoint to resume from, or null
+    },
+    'paths': {
+        'dataset_root': _STR,           # contains train/ val/ test/
+        'output_dir': _STR,             # every run creates its own sub-directory here
+    },
+    'data': {
+        'dataset': _choice('miniscapes'),
+        'workers': _INT,
+        'workers_validation': _INT,
+        'batch_size_validation': _INT,
+    },
+    'model': {
+        'model_name': _choice('deeplabv3p', 'deeplabv3p_multitask', 'adaptive_depth'),
+        'model_encoder_name': _choice('resnet18', 'resnet34'),
+        'pretrained': _BOOL,
+        'num_bins': _INT,               # adaptive_depth only
+        'num_heads': _INT,              # adaptive_depth only
+        'expansion': _INT,              # adaptive_depth only
+        'num_transformer_layers': _INT,  # adaptive_depth only
+    },
+    'optimization': {
+        'num_epochs': _INT,
+        'batch_size': _INT,
+        'optimizer': _choice('sgd', 'adam'),
+        'optimizer_lr': _FLOAT,
+        'optimizer_momentum': _FLOAT,
+        'optimizer_weight_decay': _FLOAT,
+        'optimizer_float_16': _BOOL,
+        'lr_scheduler': _choice('poly'),
+        'lr_scheduler_power': _FLOAT,
+    },
+    'loss': {
+        'loss_weight_semseg': _FLOAT,
+        'loss_weight_depth': _FLOAT,
+        'loss_weight_aux': _FLOAT,      # weight of the auxiliary losses a model may define
+        'depth_loss': _choice('l1', 'l2'),
+    },
+    'augmentation': {
+        'aug_input_crop_size': _INT,
+        'aug_geom_scale_min': _FLOAT,
+        'aug_geom_scale_max': _FLOAT,
+        'aug_geom_tilt_max_deg': _FLOAT,
+        'aug_geom_wiggle_max_ratio': _FLOAT,
+        'aug_geom_reflect': _BOOL,
+    },
+    'trainer': {
+        'accelerator': _STR,            # auto | cpu | gpu
+        'devices': ((int, str), None),  # auto or a number of devices
+        'log_every_n_steps': _INT,
+        'num_sanity_val_steps': _INT,
+        'limit_train_batches': _NUM_OPT,  # null = all; int = number of batches; float = fraction (debug only)
+        'limit_val_batches': _NUM_OPT,
+        'limit_test_batches': _NUM_OPT,
+        'checkpoint_monitor': _STR,     # logged metric that selects the best checkpoint
+        'checkpoint_mode': _choice('max', 'min'),
+        'save_last_checkpoint': _BOOL,  # also keep last.ckpt (needed to resume; doubles checkpoint disk usage)
+        'test_after_fit': _BOOL,        # write test-split predictions with the best checkpoint
+    },
+    'wandb': {
+        'mode': _choice('online', 'offline', 'disabled'),
+        'project': _STR,
+        'entity': _STR_OPT,
+        'group': _STR_OPT,              # e.g. the experiment family, to compare runs
+        'tags': _LIST_STR,
+        'notes': _STR_OPT,
+        'key_file': _STR_OPT,           # file with the API key (WANDB_API_KEY takes precedence)
+    },
+    'visualization': {
+        'num_steps_visualization_first': _INT,
+        'num_steps_visualization_interval': _INT,
+        'visualize_num_samples_in_batch': _INT,
+        'visualize_img_grid_width': _INT,
+        'observe_train_ids': _LIST_INT,
+        'observe_valid_ids': _LIST_INT,
+    },
+}
+
+# Sections whose keys get the section name as prefix in the flat namespace (cfg.wandb_mode, cfg.trainer_devices).
+PREFIXED_SECTIONS = ('trainer', 'wandb')
+
+PATH_KEYS = ('dataset_root', 'output_dir', 'resume', 'wandb_key_file')
+
+# Task sets each model can be trained with.
+MODEL_TASKS = {
+    'deeplabv3p': ({MOD_SEMSEG}, {MOD_DEPTH}, {MOD_SEMSEG, MOD_DEPTH}),
+    'deeplabv3p_multitask': ({MOD_SEMSEG, MOD_DEPTH},),
+    'adaptive_depth': ({MOD_DEPTH},),
+}
+
+
+def _flat_name(section, key):
+    return f'{section}_{key}' if section in PREFIXED_SECTIONS else key
+
+
+# Keys that identify a run rather than an experiment setup; excluded when comparing experiment settings.
 EXPERIMENT_INVARIANT_KEYS = (
-    'log_dir',
     'dataset_root',
-    'prepare_submission',
+    'output_dir',
+    'run_dir',
+    'run_name',
     'batch_size_validation',
     'workers',
     'workers_validation',
@@ -145,3 +165,171 @@ EXPERIMENT_INVARIANT_KEYS = (
     'observe_train_ids',
     'observe_valid_ids',
 )
+
+_UNRESOLVED_VAR = re.compile(r'\$\{?[A-Za-z_][A-Za-z0-9_]*\}?')
+
+
+def _expand_env(value, where):
+    if isinstance(value, dict):
+        return {k: _expand_env(v, f'{where}.{k}') for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(v, where) for v in value]
+    if isinstance(value, str):
+        expanded = os.path.expandvars(value)
+        unresolved = _UNRESOLVED_VAR.search(expanded)
+        if unresolved:
+            raise ValueError(
+                f'Config value "{where}" references the environment variable "{unresolved.group(0)}", '
+                f'which is not set (value: "{value}")'
+            )
+        return expanded
+    return value
+
+
+def _coerce(value, spec):
+    # YAML 1.1 (PyYAML) reads "1e-3" as a string, only "1.0e-3" as a float: accept the former for float keys
+    types, _ = spec
+    if isinstance(value, str) and float in types and str not in types:
+        try:
+            return float(value)
+        except ValueError:
+            pass
+    return value
+
+
+def _check_type(where, value, spec):
+    types, choices = spec
+    # bool is an int subclass: reject booleans where a number is expected and vice versa
+    if isinstance(value, bool) and bool not in types:
+        raise TypeError(f'Config value "{where}" must be of type {_type_names(types)}, got bool')
+    if not isinstance(value, types):
+        raise TypeError(f'Config value "{where}" must be of type {_type_names(types)}, '
+                        f'got {type(value).__name__} ({value!r})')
+    if choices is not None and value not in choices:
+        raise ValueError(f'Config value "{where}" must be one of {list(choices)}, got {value!r}')
+
+
+def _type_names(types):
+    return '/'.join(t.__name__ for t in types)
+
+
+def _set_by_dotted_key(raw, dotted, value):
+    if '.' in dotted:
+        section, key = dotted.split('.', 1)
+    else:
+        matches = [s for s, keys in SCHEMA.items() if dotted in keys]
+        if len(matches) != 1:
+            raise KeyError(f'Override "{dotted}" is ambiguous or unknown; use the form section.key '
+                           f'(sections: {list(SCHEMA)})')
+        section, key = matches[0], dotted
+    if section not in SCHEMA or key not in SCHEMA[section]:
+        raise KeyError(f'Override "{dotted}" does not match any key of the config schema')
+    raw.setdefault(section, {})[key] = value
+
+
+def parse_overrides(overrides):
+    """['optimization.optimizer_lr=1e-3', ...] -> list of (dotted key, python value parsed as YAML)."""
+    parsed = []
+    for item in overrides:
+        if '=' not in item:
+            raise ValueError(f'Override "{item}" must have the form section.key=value')
+        key, value = item.split('=', 1)
+        parsed.append((key.strip(), yaml.safe_load(value)))
+    return parsed
+
+
+def build_config(raw, overrides=()):
+    """Validate a nested config dict (already loaded from YAML), apply overrides and flatten it."""
+    unknown_sections = set(raw) - set(SCHEMA)
+    if unknown_sections:
+        raise KeyError(f'Unknown config sections: {sorted(unknown_sections)}; valid: {list(SCHEMA)}')
+
+    raw = {section: dict(raw.get(section) or {}) for section in SCHEMA}
+    for dotted, value in overrides:
+        _set_by_dotted_key(raw, dotted, value)
+
+    flat = {}
+    for section, keys in SCHEMA.items():
+        unknown_keys = set(raw[section]) - set(keys)
+        if unknown_keys:
+            raise KeyError(f'Unknown keys in config section "{section}": {sorted(unknown_keys)}; '
+                           f'valid: {list(keys)}')
+        missing_keys = set(keys) - set(raw[section])
+        if missing_keys:
+            raise KeyError(f'Missing keys in config section "{section}": {sorted(missing_keys)}')
+        for key, spec in keys.items():
+            where = f'{section}.{key}'
+            value = _coerce(_expand_env(raw[section][key], where), spec)
+            _check_type(where, value, spec)
+            name = _flat_name(section, key)
+            assert name not in flat, f'Config key collision on "{name}"'
+            flat[name] = value
+
+    for key in PATH_KEYS:
+        if flat[key] is not None:
+            flat[key] = expandpath(flat[key])
+
+    cfg = argparse.Namespace(**flat)
+    validate_config(cfg)
+    return cfg
+
+
+def validate_config(cfg):
+    tasks = cfg.tasks
+    if len(tasks) == 0 or len(set(tasks)) != len(tasks) or not set(tasks) <= {MOD_SEMSEG, MOD_DEPTH}:
+        raise ValueError(f'experiment.tasks must be a non-empty subset of [{MOD_SEMSEG}, {MOD_DEPTH}] '
+                         f'without duplicates, got {tasks}')
+    if set(tasks) not in MODEL_TASKS[cfg.model_name]:
+        supported = [sorted(s) for s in MODEL_TASKS[cfg.model_name]]
+        raise ValueError(f'Model "{cfg.model_name}" cannot be trained with tasks {sorted(tasks)}; '
+                         f'supported task sets: {supported}')
+    if cfg.model_name == 'adaptive_depth' and round(cfg.num_bins ** 0.5) ** 2 != cfg.num_bins:
+        raise ValueError(f'model.num_bins must be a perfect square for adaptive_depth, got {cfg.num_bins}')
+    for name in ('loss_weight_semseg', 'loss_weight_depth', 'loss_weight_aux'):
+        if getattr(cfg, name) < 0:
+            raise ValueError(f'loss.{name} must be >= 0')
+    if cfg.batch_size < 1 or cfg.num_epochs < 1:
+        raise ValueError('optimization.batch_size and optimization.num_epochs must be >= 1')
+    if not all(isinstance(i, int) and not isinstance(i, bool)
+               for i in cfg.observe_train_ids + cfg.observe_valid_ids):
+        raise TypeError('visualization.observe_*_ids must be lists of integers')
+    if not all(isinstance(t, str) for t in cfg.wandb_tags):
+        raise TypeError('wandb.tags must be a list of strings')
+    if isinstance(cfg.trainer_devices, str) and cfg.trainer_devices != 'auto':
+        raise ValueError('trainer.devices must be "auto" or an integer')
+
+
+def config_to_nested(cfg):
+    """Inverse of the flattening: {section: {key: value}} as found in the YAML file (schema keys only)."""
+    return {
+        section: {key: getattr(cfg, _flat_name(section, key)) for key in keys}
+        for section, keys in SCHEMA.items()
+    }
+
+
+def load_config(argv=None):
+    """
+    Parse ``--config path.yaml [section.key=value ...]`` and return the validated flat configuration.
+    """
+    parser = argparse.ArgumentParser(
+        description='Train a model described by a YAML config file.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument('--config', type=str, required=True, help='Path to the experiment YAML file')
+    parser.add_argument(
+        'overrides', nargs='*', metavar='section.key=value',
+        help='Override individual config values, e.g. optimization.optimizer_lr=0.001 experiment.tasks=[semseg]')
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+
+    with open(os.path.expanduser(args.config)) as f:
+        raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ValueError(f'Config file {args.config} must contain a YAML mapping')
+
+    cfg = build_config(raw, parse_overrides(args.overrides))
+    cfg.config_path = os.path.abspath(args.config)
+    return cfg
+
+
+def print_config(cfg):
+    print(json.dumps(config_to_nested(cfg), indent=4))

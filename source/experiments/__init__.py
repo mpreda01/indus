@@ -1,9 +1,5 @@
-from .experiment_semseg_with_depth import ExperimentDepthSemseg
-from .experiment_semseg import ExperimentSemseg
-from .experiment_depth import ExperimentDepth
+from .experiment_multitask import ExperimentMultiTask
 
 __all__ = [
-    'ExperimentDepthSemseg',
-    'ExperimentSemseg',
-    'ExperimentDepth'
+    'ExperimentMultiTask',
 ]

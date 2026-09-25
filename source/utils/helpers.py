@@ -5,24 +5,29 @@ from source.datasets.dataset_miniscapes import DatasetMiniscapes
 from source.models import *
 
 
+# Registries: the names below are the values accepted by `data.dataset` and `model.model_name` in the config
+# (see SCHEMA in source/utils/config.py). To add a model, register it here and in SCHEMA / MODEL_TASKS.
+DATASETS = {
+    'miniscapes': DatasetMiniscapes,
+}
+
+MODELS = {
+    'deeplabv3p': ModelDeepLabV3Plus,
+    'adaptive_depth': ModelAdaptiveDepth,
+    'deeplabv3p_multitask': ModelDeepLabV3PlusMultiTask,
+}
+
 
 def resolve_dataset_class(name):
-    return {
-        'miniscapes': DatasetMiniscapes,
-    }[name]
+    if name not in DATASETS:
+        raise KeyError(f'Unknown dataset "{name}", registered: {list(DATASETS)}')
+    return DATASETS[name]
 
-
-def resolve_dataset_class(name):
-    return {
-        'miniscapes': DatasetMiniscapes,
-    }[name]
 
 def resolve_model_class(name):
-    return {
-        'deeplabv3p': ModelDeepLabV3Plus,
-        'adaptive_depth': ModelAdaptiveDepth,
-        'deeplabv3p_multitask': ModelDeepLabV3PlusMultiTask,
-    }[name]
+    if name not in MODELS:
+        raise KeyError(f'Unknown model "{name}", registered: {list(MODELS)}')
+    return MODELS[name]
 
 
 def resolve_optimizer(cfg, params):

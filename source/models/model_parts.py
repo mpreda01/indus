@@ -66,9 +66,10 @@ class Encoder(torch.nn.Module):
             # special case due to prohibited dilation in the original BasicBlock
             pretrained = encoder_kwargs.pop('pretrained', False)
             progress = encoder_kwargs.pop('progress', True)
-            model = resnet._resnet(
-                name, BasicBlockWithDilation, _basic_block_layers[name], pretrained, progress, **encoder_kwargs
-            )
+            model = resnet.ResNet(BasicBlockWithDilation, list(_basic_block_layers[name]), **encoder_kwargs)
+            if pretrained:
+                weights = getattr(resnet, f'{name.replace("resnet", "ResNet")}_Weights').IMAGENET1K_V1
+                model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
 
         replace_stride_with_dilation = encoder_kwargs.get('replace_stride_with_dilation', (False, False, False))
         assert len(replace_stride_with_dilation) == 3
@@ -124,8 +125,14 @@ class DecoderDeeplabV3p(torch.nn.Module):
     def __init__(self, bottleneck_ch, skip_4x_ch, num_out_ch):
         super(DecoderDeeplabV3p, self).__init__()
 
-        # TODO: Implement a proper decoder with skip connections instead of the following
-        self.features_to_predictions = torch.nn.Conv2d(bottleneck_ch, num_out_ch, kernel_size=1, stride=1)
+        # DeepLabV3+ decoder (Chen et al., 2018): the 4x skip features are reduced to 48 channels so they do
+        # not outweigh the ASPP features, concatenated with the upsampled ASPP output and refined by two 3x3 convs.
+        self.skip_reduce = ASPPpart(skip_4x_ch, 48, kernel_size=1, stride=1, padding=0, dilation=1)
+        self.refine = torch.nn.Sequential(
+            ASPPpart(bottleneck_ch + 48, 256, kernel_size=3, stride=1, padding=1, dilation=1),
+            ASPPpart(256, 256, kernel_size=3, stride=1, padding=1, dilation=1),
+        )
+        self.features_to_predictions = torch.nn.Conv2d(256, num_out_ch, kernel_size=1, stride=1)
 
     def forward(self, features_bottleneck, features_skip_4x):
         """
@@ -134,11 +141,11 @@ class DecoderDeeplabV3p(torch.nn.Module):
         :param features_skip_4x: features of encoder of scale == 4
         :return: features with 256 channels and the final tensor of predictions
         """
-        # TODO: Implement a proper decoder with skip connections instead of the following; keep returned
-        #       tensors in the same order and of the same shape.
-        features_4x = F.interpolate(
+        features_bottleneck_4x = F.interpolate(
             features_bottleneck, size=features_skip_4x.shape[2:], mode='bilinear', align_corners=False
         )
+        features_skip = self.skip_reduce(features_skip_4x)
+        features_4x = self.refine(torch.cat([features_bottleneck_4x, features_skip], dim=1))
         predictions_4x = self.features_to_predictions(features_4x)
         return predictions_4x, features_4x
 

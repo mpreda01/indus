@@ -10,6 +10,9 @@ https://www.trace.ethz.ch/teaching/CVAIAC2025/index.html
 Please refer to the assignment PDF for instructions regarding the assignment scope. 
 
 
+> **Training system:** this repository now trains from a YAML config with `python -m source.scripts.train --config config.yaml`.
+> The sections below describe the original template; see [doc/training_system.md](doc/training_system.md) for the current workflow.
+
 ### Environment Setup
 
 If not already done, please follow the [First Tutorial](https://www.trace.ethz.ch/teaching/CVAIAC2025/exercises/CVAIAC_week3_20251003_TA.pdf) to setup your environment.

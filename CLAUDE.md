@@ -119,30 +119,30 @@ Operating rules:
 - If something is ambiguous or cannot be verified from the data or the paper, say so and
   ask: do not invent values (depth range, split, classes, hyperparameters).
 
-## Commands (to fill in after exploring the repo)
+## Commands
 
-Found by exploring the repo (PyTorch + PyTorch Lightning, DeepLabV3+ with ResNet18/34 encoder,
-ETH CVAIAC course template; dataset class is `miniscapes`, a Synscapes subset):
+Found by exploring the repo (PyTorch + PyTorch Lightning 2.x, DeepLabV3+ with ResNet18/34 encoder,
+ETH CVAIAC course template; dataset class is `miniscapes`, a Synscapes subset). Full guide: `doc/training_system.md`.
 
-- Environment setup: `pip install -r requirements.txt` (Python >= 3.12; versions pinned to latest as of
-  2026-09-19). The code in `source/` was written for pytorch-lightning 1.4.1 and must be ported to 2.x
-  (`TestTubeLogger`, `gpus=`, `distributed_backend`, `weights_summary`, `progress_bar_refresh_rate`,
-  `validation_epoch_end`, `test_end`) before training works. README still mentions a `py39` conda env.
-- Configuration: `config.yaml` (sections mirror the argparse flags of `source/utils/config.py`).
-  Training still reads argparse flags only; no YAML loader exists yet.
-- Data preprocessing/conversion: none needed for miniscapes. `python -m source.datasets.dataset_miniscapes <root>`
-  runs an integrity check; `source/scripts/compute_statistics.py` computes depth statistics.
-- Training: `python -m source.scripts.train --name <n> --log_dir <dir> --dataset_root <dir> --model_name
-  deeplabv3p|deeplabv3p_multitask|adaptive_depth --tasks semseg [depth] ...` (see README).
-  `train.py` deletes `log_dir` at start, which conflicts with "never overwrite previous runs".
-  `shell_train.sh` / `slurm_train.sh` are referenced in the README but are not in the repo.
+- Environment setup: `pip install -r requirements.txt` (Python >= 3.11; versions pinned as of 2026-09-19).
+  Locally, the conda env `industry` has CPU torch 2.14 / lightning 2.6.6 / wandb / pytest.
+- Configuration: `config.yaml` (template; copy to `configs/<experiment>.yaml`). All training parameters, input/output
+  dirs and W&B identity live there; schema in `source/utils/config.py`. Values are overridable with `section.key=value`.
+  `dataset_root` / `output_dir` read the env vars `DATASET_ROOT` / `SAVEDIR`.
+- Training (any model/task set): `python -m source.scripts.train --config config.yaml [section.key=value ...]`.
+  Each run writes to `<output_dir>/<name>_seed<seed>_<timestamp>/` (config, run_info.json with commit, checkpoints,
+  csv metrics, predictions) and never overwrites another run. `wandb.mode=disabled|offline|online`.
+- Experiments: one generic `ExperimentMultiTask` (`source/experiments/experiment_multitask.py`); the experiment is
+  chosen by `experiment.tasks` + `model.model_name` (see the table in `doc/training_system.md`).
+- Data checks: `python -m source.datasets.dataset_miniscapes <root>` (integrity), `source/scripts/compute_statistics.py`.
 - Evaluation (mIoU, SI-logRMSE): computed in validation by `source/utils/metrics.py`; the SI-log metric
-  currently hardcodes lambda = 1 and a x100 scale. `SILogLoss` in `source/losses/si_log.py` is a TODO stub.
-- Tests: none yet (pytest is in requirements.txt).
+  currently hardcodes lambda = 1 and a x100 scale. `SILogLoss` in `source/losses/si_log.py` is a TODO stub; the
+  depth loss in use is `MaskedDepthRegressionLoss` (L1/L2).
+- Tests: `python -m pytest -q` (CPU, ~1 min, synthetic dataset, needs ~1 GB temp disk).
 - Lint/format: TODO (no tooling configured)
 
-Not implemented in the template (TODO stubs): `ModelDeepLabV3PlusMultiTask` (branched) and the adaptive-bins
-part of `ModelAdaptiveDepth`.
+Not implemented in the template (TODO stubs): `ModelDeepLabV3PlusMultiTask` (branched), the adaptive-bins part of
+`ModelAdaptiveDepth`, `SelfAttention`, `SILogLoss`.
 
 ## Open decisions (to settle together with me)
 

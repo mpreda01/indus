@@ -147,12 +147,12 @@ def prepare_depth(img, depth_min, depth_max, cmap=None):
     img_safe = img.clone()
     mask_img_invalid = img_safe != img_safe
     img_safe[mask_img_invalid] = 0
-    cm = matplotlib.cm.get_cmap(cmap if cmap is not None else 'plasma_r')
+    cm = matplotlib.colormaps[cmap if cmap is not None else 'plasma_r']
 
     # scale depth range to [0,1]
     img_01 = ((img_safe - depth_min) / (depth_max - depth_min)).clamp(0, 1)
     # scale logarithmically to highlight close objects
-    img_01 = (1 + img_01 * 1000).log() / np.math.log(1001)
+    img_01 = (1 + img_01 * 1000).log() / float(np.log(1001))
 
     img_colored_np = cm(img_01.cpu().numpy(), bytes=False)[:,:,:,0:3]
     img_colored_np = np.rollaxis(img_colored_np, 3, 1)
