@@ -13,11 +13,11 @@
 
 experiment:
   # Run name: part of the output directory and of the W&B run name.
-  name: baseline_depth
+  name: joint_architecture
   # Seeds python, numpy, torch and the dataloader workers. Logged with every run.
   seed: 42
   # Tasks trained by this run: [semseg], [depth] or [semseg, depth].
-  tasks: [depth]
+  tasks: [semseg, depth]
   # Checkpoint (.ckpt) to resume from, or null. A resumed run still writes to a new run directory.
   resume: null
 
