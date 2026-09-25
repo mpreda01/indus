@@ -13,11 +13,11 @@
 
 experiment:
   # Run name: part of the output directory and of the W&B run name.
-  name: joint_architecture
+  name: baselione_depth
   # Seeds python, numpy, torch and the dataloader workers. Logged with every run.
   seed: 42
   # Tasks trained by this run: [semseg], [depth] or [semseg, depth].
-  tasks: [semseg, depth]
+  tasks: [depth]
   # Checkpoint (.ckpt) to resume from, or null. A resumed run still writes to a new run directory.
   resume: null
 
@@ -95,7 +95,7 @@ trainer:
   # Logged metric that selects the best checkpoint. metrics_summary/total is max(mIoU-50,0) and/or
   # max(50-SILogRMSE,0) averaged over the active tasks: it is 0 (no signal) until a task passes 50 mIoU.
   # For early/short runs monitor metrics_task_semseg/mean_iou (max) or metrics_task_depth/si_log_rmse (min).
-  checkpoint_monitor: metrics_task_semseg/mean_iou
+  checkpoint_monitor: metrics_task_depth/si_log_rmse #metrics_task_semseg/mean_iou for semseg task, metrics_task_depth/si_log_rmse for depth task
   checkpoint_mode: max
   save_last_checkpoint: true    # also keep last.ckpt, needed to resume training (doubles checkpoint disk usage)
   test_after_fit: true          # write test-split predictions with the best checkpoint (no test metrics)

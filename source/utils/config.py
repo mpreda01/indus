@@ -295,6 +295,14 @@ def validate_config(cfg):
         raise TypeError('visualization.observe_*_ids must be lists of integers')
     if not all(isinstance(t, str) for t in cfg.wandb_tags):
         raise TypeError('wandb.tags must be a list of strings')
+    # a monitored metric of an inactive task is never logged: ModelCheckpoint would crash after the first epoch
+    for task in (MOD_SEMSEG, MOD_DEPTH):
+        for prefix in (f'metrics_task_{task}/', f'metrics_summary/{task}', f'loss_val/{task}'):
+            if cfg.trainer_checkpoint_monitor.startswith(prefix) and task not in cfg.tasks:
+                raise ValueError(
+                    f'trainer.checkpoint_monitor="{cfg.trainer_checkpoint_monitor}" refers to the {task} task, '
+                    f'which is not trained (experiment.tasks={cfg.tasks}). For a depth-only run use '
+                    f'metrics_task_depth/si_log_rmse with mode min')
     if isinstance(cfg.trainer_devices, str) and cfg.trainer_devices != 'auto':
         raise ValueError('trainer.devices must be "auto" or an integer')
 

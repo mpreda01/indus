@@ -72,3 +72,13 @@ def test_load_config_from_command_line(monkeypatch, tmp_path):
     monkeypatch.setenv('SAVEDIR', str(tmp_path))
     cfg = load_config(['--config', CONFIG_PATH, 'experiment.seed=7'])
     assert cfg.seed == 7
+
+
+def test_checkpoint_monitor_must_belong_to_a_trained_task(raw):
+    raw['trainer']['checkpoint_monitor'] = 'metrics_task_semseg/mean_iou'
+    build_config(raw)  # joint or semseg-only: fine
+    with pytest.raises(ValueError, match='checkpoint_monitor'):
+        build_config(raw, parse_overrides(['experiment.tasks=[depth]']))
+    build_config(raw, parse_overrides([
+        'experiment.tasks=[depth]', 'trainer.checkpoint_monitor=metrics_task_depth/si_log_rmse',
+        'trainer.checkpoint_mode=min']))
