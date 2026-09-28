@@ -274,6 +274,30 @@ def build_config(raw, overrides=()):
     return cfg
 
 
+# Whether a lower or higher value is better, keyed by the part of the metric name after the last '/'.
+# Used to catch a checkpoint_monitor / checkpoint_mode mismatch, which silently keeps the WORST checkpoint
+# instead of the best (e.g. monitoring an error metric like si_log_rmse with checkpoint_mode: max).
+_LOWER_IS_BETTER = {'log_mae', 'mae', 'rmse', 'rel', 'rel_squared', 'inv_mae', 'inv_rmse', 'log_rmse', 'si_log_rmse'}
+_HIGHER_IS_BETTER = {'mean_iou', 'delta1', 'delta2', 'delta3'}
+
+
+def _expected_checkpoint_mode(monitor):
+    """('min'/'max') the monitor is known to want, or None if it cannot be inferred (a custom metric)."""
+    if monitor.startswith('loss_train/') or monitor.startswith('loss_val/'):
+        return 'min'
+    if monitor.startswith('metrics_summary/'):
+        return 'max'  # max(mIoU-50, 0) and max(50-SILogRMSE, 0): higher is always better here
+    if monitor.startswith('metrics_task_semseg/'):
+        return 'max'  # mean_iou and every per-class IoU
+    if monitor.startswith('metrics_task_depth/'):
+        suffix = monitor.split('/', 1)[1]
+        if suffix in _HIGHER_IS_BETTER:
+            return 'max'
+        if suffix in _LOWER_IS_BETTER:
+            return 'min'
+    return None
+
+
 def validate_config(cfg):
     tasks = cfg.tasks
     if len(tasks) == 0 or len(set(tasks)) != len(tasks) or not set(tasks) <= {MOD_SEMSEG, MOD_DEPTH}:
@@ -283,6 +307,14 @@ def validate_config(cfg):
         supported = [sorted(s) for s in MODEL_TASKS[cfg.model_name]]
         raise ValueError(f'Model "{cfg.model_name}" cannot be trained with tasks {sorted(tasks)}; '
                          f'supported task sets: {supported}')
+    expected_mode = _expected_checkpoint_mode(cfg.trainer_checkpoint_monitor)
+    if expected_mode is not None and cfg.trainer_checkpoint_mode != expected_mode:
+        raise ValueError(
+            f'trainer.checkpoint_monitor="{cfg.trainer_checkpoint_monitor}" is '
+            f'{"lower" if expected_mode == "min" else "higher"}-is-better, but trainer.checkpoint_mode='
+            f'"{cfg.trainer_checkpoint_mode}" (expected "{expected_mode}"). This mismatch silently keeps '
+            f'the WORST checkpoint instead of the best.'
+        )
     if cfg.model_name == 'adaptive_depth' and round(cfg.num_bins ** 0.5) ** 2 != cfg.num_bins:
         raise ValueError(f'model.num_bins must be a perfect square for adaptive_depth, got {cfg.num_bins}')
     for name in ('loss_weight_semseg', 'loss_weight_depth', 'loss_weight_aux'):

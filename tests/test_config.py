@@ -34,25 +34,29 @@ def test_roundtrip_nested(raw):
 
 
 def test_overrides_dotted_and_bare_key(raw):
-    cfg = build_config(raw, parse_overrides(['optimization.optimizer_lr=1e-3', 'tasks=[semseg]', 'depth_loss=l2']))
+    # tasks=[semseg] must be paired with a semseg-compatible monitor, whatever the repo file currently monitors
+    cfg = build_config(raw, parse_overrides([
+        'optimization.optimizer_lr=1e-3', 'tasks=[semseg]', 'depth_loss=l2',
+        'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou', 'trainer.checkpoint_mode=max']))
     assert cfg.optimizer_lr == 1e-3
     assert cfg.tasks == ['semseg']
     assert cfg.depth_loss == 'l2'
 
 
-@pytest.mark.parametrize('override', [
-    'optimization.nope=1',              # unknown key
-    'nope.optimizer_lr=1',              # unknown section
-    'optimization.optimizer=rmsprop',   # not a valid choice
-    'optimization.batch_size=abc',      # wrong type
-    'optimization.batch_size=true',     # bool is not an int
-    'experiment.tasks=[flow]',          # unknown task
-    'experiment.tasks=[]',              # no task
-    'model.model_name=adaptive_depth',  # incompatible with tasks [semseg, depth]
+@pytest.mark.parametrize('overrides', [
+    ['optimization.nope=1'],              # unknown key
+    ['nope.optimizer_lr=1'],              # unknown section
+    ['optimization.optimizer=rmsprop'],   # not a valid choice
+    ['optimization.batch_size=abc'],      # wrong type
+    ['optimization.batch_size=true'],     # bool is not an int
+    ['experiment.tasks=[flow]'],          # unknown task
+    ['experiment.tasks=[]'],              # no task
+    # adaptive_depth only supports tasks=[depth], regardless of what the repo file currently trains
+    ['experiment.tasks=[semseg, depth]', 'model.model_name=adaptive_depth'],
 ])
-def test_invalid_config_is_rejected(raw, override):
+def test_invalid_config_is_rejected(raw, overrides):
     with pytest.raises((KeyError, ValueError, TypeError)):
-        build_config(raw, parse_overrides([override]))
+        build_config(raw, parse_overrides(overrides))
 
 
 def test_missing_key_is_rejected(raw):
@@ -75,10 +79,39 @@ def test_load_config_from_command_line(monkeypatch, tmp_path):
 
 
 def test_checkpoint_monitor_must_belong_to_a_trained_task(raw):
-    raw['trainer']['checkpoint_monitor'] = 'metrics_task_semseg/mean_iou'
-    build_config(raw)  # joint or semseg-only: fine
+    overrides = parse_overrides([
+        'experiment.tasks=[semseg, depth]', 'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou',
+        'trainer.checkpoint_mode=max'])
+    build_config(raw, overrides)  # semseg is trained: fine
     with pytest.raises(ValueError, match='checkpoint_monitor'):
-        build_config(raw, parse_overrides(['experiment.tasks=[depth]']))
+        build_config(raw, overrides + parse_overrides(['experiment.tasks=[depth]']))
+
+
+def test_checkpoint_mode_must_match_the_monitor_direction(raw):
+    """Regression test: monitoring an error metric (e.g. si_log_rmse) with mode='max' silently keeps the
+    WORST checkpoint instead of the best, because it looks for the highest value of a "lower is better" metric."""
+    base = ['experiment.tasks=[semseg, depth]']
+
+    # si_log_rmse is lower-is-better
+    with pytest.raises(ValueError, match='checkpoint_mode'):
+        build_config(raw, parse_overrides(base + [
+            'trainer.checkpoint_monitor=metrics_task_depth/si_log_rmse', 'trainer.checkpoint_mode=max']))
+    build_config(raw, parse_overrides(base + [
+        'trainer.checkpoint_monitor=metrics_task_depth/si_log_rmse', 'trainer.checkpoint_mode=min']))
+
+    # mean_iou is higher-is-better
+    with pytest.raises(ValueError, match='checkpoint_mode'):
+        build_config(raw, parse_overrides(base + [
+            'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou', 'trainer.checkpoint_mode=min']))
+    build_config(raw, parse_overrides(base + [
+        'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou', 'trainer.checkpoint_mode=max']))
+
+    # delta1 (depth) is also higher-is-better (fraction of pixels within a threshold)
+    with pytest.raises(ValueError, match='checkpoint_mode'):
+        build_config(raw, parse_overrides([
+            'experiment.tasks=[depth]', 'trainer.checkpoint_monitor=metrics_task_depth/delta1',
+            'trainer.checkpoint_mode=min']))
+
+    # a metric whose direction is not known (not one of loss_*/metrics_*) is not checked
     build_config(raw, parse_overrides([
-        'experiment.tasks=[depth]', 'trainer.checkpoint_monitor=metrics_task_depth/si_log_rmse',
-        'trainer.checkpoint_mode=min']))
+        'experiment.tasks=[semseg]', 'trainer.checkpoint_monitor=trainer/LR', 'trainer.checkpoint_mode=min']))

@@ -22,7 +22,7 @@ def run_training(tiny_dataset, tmp_path, monkeypatch, *extra):
         'optimization.batch_size=4', 'optimization.num_epochs=2', 'optimization.optimizer_lr=0.001',
         'augmentation.aug_input_crop_size=64',
         'trainer.accelerator=cpu', 'trainer.devices=1', 'trainer.log_every_n_steps=1',
-        'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou',
+        'trainer.checkpoint_monitor=metrics_task_semseg/mean_iou', 'trainer.checkpoint_mode=max',
         'trainer.save_last_checkpoint=false',
         'wandb.mode=disabled',
         *extra,
