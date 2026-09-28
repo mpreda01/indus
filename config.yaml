@@ -71,7 +71,13 @@ loss:
   loss_weight_semseg: 0.5
   loss_weight_depth: 0.5
   loss_weight_aux: 1.0          # only used by models that define auxiliary losses (e.g. bin centers)
-  depth_loss: l1                # l1 | l2, in meters, over valid ground-truth pixels only
+  depth_loss: l1                # l1 | l2, over valid ground-truth pixels only
+  # Divide the depth residual by the dataset's depth_meters_stddev (29.1264 m) before computing L1/L2.
+  # Without this, raw meters-scale depth loss (O(1-10) m) dwarfs cross-entropy (O(0.1-2) nats) under equal
+  # loss weights, so depth dominates the total gradient and hurts segmentation ("negative transfer") even
+  # though loss_weight_semseg/depth are nominally equal. Normalizing makes the configured weights meaningful.
+  # Only affects the training loss; metrics_task_depth/* are always reported in meters.
+  normalize_depth_loss: true
 
 # --- Augmentation -----------------------------------------------------------------------------
 augmentation:

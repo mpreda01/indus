@@ -94,7 +94,11 @@ class ExperimentMultiTask(pl.LightningModule):
                 self.semseg_num_classes, self.semseg_ignore_label, self.semseg_class_names
             )
         if MOD_DEPTH in self.tasks:
-            self.loss_fns[MOD_DEPTH] = MaskedDepthRegressionLoss(kind=cfg.depth_loss)
+            # see MaskedDepthRegressionLoss docstring: normalizing brings the raw meters-scale loss
+            # to the same order of magnitude as cross-entropy, so loss_weight_semseg/depth mean what
+            # they say instead of being swamped by the unit mismatch between the two tasks.
+            depth_scale = self.depth_meters_stddev if cfg.normalize_depth_loss else 1.0
+            self.loss_fns[MOD_DEPTH] = MaskedDepthRegressionLoss(kind=cfg.depth_loss, scale=depth_scale)
             self.loss_weights[MOD_DEPTH] = cfg.loss_weight_depth
             self.metrics[MOD_DEPTH] = MetricsDepth()
 

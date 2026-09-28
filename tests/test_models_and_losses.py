@@ -39,6 +39,22 @@ def test_masked_depth_loss_all_invalid_is_zero_with_gradient():
     assert loss.item() == 0.0 and torch.isfinite(pred.grad).all()
 
 
+@pytest.mark.parametrize('kind', ['l1', 'l2'])
+def test_masked_depth_loss_scale_normalizes_the_residual(kind):
+    pred = torch.tensor([10.0, 20.0, 30.0])
+    gt = torch.tensor([13.0, 24.0, 42.0])
+    unscaled = MaskedDepthRegressionLoss(kind, scale=1.0)(pred, gt)
+    scale = 29.1264  # e.g. DatasetMiniscapes.depth_meters_stddev
+    scaled = MaskedDepthRegressionLoss(kind, scale=scale)(pred, gt)
+    expected_ratio = scale if kind == 'l1' else scale ** 2
+    assert scaled.item() == pytest.approx(unscaled.item() / expected_ratio, rel=1e-5)
+
+
+def test_masked_depth_loss_rejects_non_positive_scale():
+    with pytest.raises(ValueError):
+        MaskedDepthRegressionLoss('l1', scale=0.0)
+
+
 def test_visualization_image_keeps_colors_in_wandb(monkeypatch):
     """W&B renders float tensors as black images: the logged image must be 8-bit and keep its colors."""
     import wandb

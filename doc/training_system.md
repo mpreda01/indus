@@ -108,7 +108,7 @@ the section as prefix (`cfg.trainer_accelerator`, `cfg.wandb_mode`).
 | `data` | `dataset`, `workers`, `workers_validation`, `batch_size_validation` |
 | `model` | `model_name`, `model_encoder_name`, `pretrained`, adaptive-bins keys (`num_bins`, `num_heads`, `expansion`, `num_transformer_layers`) |
 | `optimization` | `num_epochs`, `batch_size`, `optimizer`, `optimizer_lr`, `optimizer_momentum`, `optimizer_weight_decay`, `optimizer_float_16`, `lr_scheduler`, `lr_scheduler_power` |
-| `loss` | `loss_weight_semseg`, `loss_weight_depth`, `loss_weight_aux`, `depth_loss` (`l1`/`l2`) |
+| `loss` | `loss_weight_semseg`, `loss_weight_depth`, `loss_weight_aux`, `depth_loss` (`l1`/`l2`), `normalize_depth_loss` |
 | `augmentation` | `aug_input_crop_size`, `aug_geom_*` |
 | `trainer` | `accelerator`, `devices`, `log_every_n_steps`, `num_sanity_val_steps`, `limit_*_batches` (debug), `checkpoint_monitor`, `checkpoint_mode`, `save_last_checkpoint`, `test_after_fit` |
 | `wandb` | `mode` (`online`/`offline`/`disabled`), `project`, `entity`, `group`, `tags`, `notes`, `key_file` |
@@ -192,9 +192,15 @@ Loss and evaluation as implemented:
 
 * Semantic segmentation: cross-entropy with `ignore_index=255`; mIoU from the accumulated confusion matrix, void ignored.
 * Depth: `MaskedDepthRegressionLoss` on metric depth (the joint model outputs `exp(x)` clamped to [0.1, 300] m), L1 or L2
-  (`loss.depth_loss`), over pixels where the ground truth is finite and > 0 (0 marks sky / out of range).
+  (`loss.depth_loss`), over pixels where the ground truth is finite and > 0 (0 marks sky / out of range). If
+  `loss.normalize_depth_loss` is true (the default), the residual is divided by the dataset's fixed
+  `depth_meters_stddev` (29.1264 m) before the loss is computed. Without this, raw L1-in-meters (O(1-10) m) dwarfs
+  cross-entropy (O(0.1-2) nats) under nominally equal loss weights, so depth dominates the total gradient and hurts
+  segmentation ("negative transfer") even though the two weights are equal — observed on the real dataset: a joint
+  run without normalization dropped from 83.6 to 65.8 mIoU relative to the segmentation baseline. This only rescales
+  the training loss; `metrics_task_depth/*` are always reported in meters, unaffected.
 * Total: `loss_weight_semseg * CE + loss_weight_depth * depth_loss (+ loss_weight_aux * aux)`. Weighted sum by default; other
-  weighting schemes are a later ablation.
+  weighting schemes (e.g. learned/uncertainty weighting) are a later ablation, not the default.
 * Checkpoint selection: `trainer.checkpoint_monitor`. The default `metrics_summary/total` is exactly 0 until a task passes
   50 mIoU (or the depth error drops below 50), so in short or early runs every epoch ties and the first checkpoint is kept.
   For such runs monitor `metrics_task_semseg/mean_iou` (max) or `metrics_task_depth/si_log_rmse` (min).

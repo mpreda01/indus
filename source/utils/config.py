@@ -91,6 +91,11 @@ SCHEMA = {
         'loss_weight_depth': _FLOAT,
         'loss_weight_aux': _FLOAT,      # weight of the auxiliary losses a model may define
         'depth_loss': _choice('l1', 'l2'),
+        # Normalize the depth residual by the dataset's depth_meters_stddev before computing L1/L2, so the
+        # depth loss and cross-entropy are on a comparable scale under equal loss weights (see
+        # MaskedDepthRegressionLoss docstring). Only affects the training loss, not the reported metrics
+        # (metrics_task_depth/* are always in meters).
+        'normalize_depth_loss': _BOOL,
     },
     'augmentation': {
         'aug_input_crop_size': _INT,

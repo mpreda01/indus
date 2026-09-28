@@ -102,6 +102,19 @@ def test_joint_model_overfits_a_tiny_dataset(tiny_dataset, tmp_path, monkeypatch
     assert mean(semseg[-10:]) < 0.95 * mean(semseg[:3]), semseg
 
 
+def test_depth_loss_normalization_matches_dataset_stddev(tiny_dataset, tmp_path, monkeypatch, cpu_only):
+    """loss.normalize_depth_loss divides the depth residual by depth_meters_stddev (29.1264, a fixed
+    DatasetMiniscapes constant) before computing L1: it should shrink loss_train/depth by exactly that
+    factor on the very first step (same seed => same model init and batch order in both runs)."""
+    depth_stddev = 29.1264
+    common = ['optimization.num_epochs=1', 'trainer.limit_train_batches=1', 'trainer.test_after_fit=false']
+    run_norm = run_training(tiny_dataset, tmp_path, monkeypatch, *common, 'loss.normalize_depth_loss=true')
+    run_raw = run_training(tiny_dataset, tmp_path, monkeypatch, *common, 'loss.normalize_depth_loss=false')
+    norm_depth = read_csv_column(run_norm, 'loss_train/depth')[0]
+    raw_depth = read_csv_column(run_raw, 'loss_train/depth')[0]
+    assert norm_depth == pytest.approx(raw_depth / depth_stddev, rel=1e-4)
+
+
 def test_model_auxiliary_losses_are_added_and_logged(tiny_dataset, tmp_path, monkeypatch, cpu_only):
     """A model exposing compute_aux_losses() gets its losses added (weighted) to the total and logged apart."""
     import torch
