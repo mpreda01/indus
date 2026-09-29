@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from source.losses import MaskedDepthRegressionLoss
-from source.models import ModelDeepLabV3Plus
+from source.models import ModelDeepLabV3Plus, ModelDeepLabV3PlusMultiTask
 
 
 @pytest.mark.parametrize('encoder', ['resnet18', 'resnet34'])
@@ -16,6 +16,27 @@ def test_joint_model_output_shapes(encoder):
     assert out['semseg'].shape == (2, 19, 64, 128)
     assert out['depth'].shape == (2, 1, 64, 128)
     assert (out['depth'] >= 0.1).all() and (out['depth'] <= 300).all()
+
+
+@pytest.mark.parametrize('encoder', ['resnet18', 'resnet34'])
+def test_branched_model_output_shapes_and_separate_heads(encoder):
+    cfg = Namespace(model_encoder_name=encoder, pretrained=False)
+    model = ModelDeepLabV3PlusMultiTask(cfg, {'semseg': 19, 'depth': 1})
+    out = model(torch.randn(2, 3, 64, 128))
+    assert out['semseg'].shape == (2, 19, 64, 128)
+    assert out['depth'].shape == (2, 1, 64, 128)
+    assert (out['depth'] >= 0.1).all() and (out['depth'] <= 300).all()
+    # branched architecture: semseg and depth must go through separate ASPP/decoder modules
+    assert model.aspps['semseg'] is not model.aspps['depth']
+    assert model.decoders['semseg'] is not model.decoders['depth']
+    assert set(model.aspps['semseg'].parameters()) != set(model.aspps['depth'].parameters())
+
+
+def test_branched_model_single_task_only_builds_that_head():
+    cfg = Namespace(model_encoder_name='resnet18', pretrained=False)
+    model = ModelDeepLabV3PlusMultiTask(cfg, {'depth': 1})
+    out = model(torch.randn(2, 3, 64, 128))
+    assert set(out) == {'depth'} and set(model.aspps) == {'depth'}
 
 
 @pytest.mark.parametrize('kind', ['l1', 'l2'])

@@ -37,7 +37,7 @@ There is one experiment class for all cases. What changes between experiments is
 | 0. Single-task baseline (segmentation) | `[semseg]` | `deeplabv3p` |
 | 0. Single-task baseline (depth) | `[depth]` | `deeplabv3p` |
 | 1. Joint (shared encoder/ASPP/decoder, n+1 channels) | `[semseg, depth]` | `deeplabv3p` |
-| 2. Branched (shared encoder, per-task ASPP + decoder) | `[semseg, depth]` | `deeplabv3p_multitask` (**model still a stub**) |
+| 2. Branched (shared encoder, per-task ASPP + decoder) | `[semseg, depth]` | `deeplabv3p_multitask` |
 | 3. Depth as classification with adaptive bins | `[depth]` | `adaptive_depth` (**model still a stub**) |
 
 Unsupported combinations are rejected at start-up (e.g. `adaptive_depth` with `[semseg, depth]`).
@@ -231,11 +231,22 @@ Changes made when building this system:
   the `*_Weights` enum (the pretrained path is **not verified**, it needs a download).
 * `visualization.py` used `np.math` and `matplotlib.cm.get_cmap`, removed in numpy 2 / matplotlib 3.9.
 * `DecoderDeeplabV3p` implemented (48-channel skip projection, concatenation, two 3x3 convs) as in DeepLabV3+.
+* `ModelDeepLabV3PlusMultiTask` (branched) implemented: one `ASPP` + one `DecoderDeeplabV3p` per task (`nn.ModuleDict`s
+  keyed by task name), sharing only the encoder. Its encoder uses `replace_stride_with_dilation=(False, False, False)`,
+  same as the joint model (the template had it at `(False, False, True)`, a different output stride, which would have
+  made the branched-vs-joint comparison also a dilation comparison — changed on request).
+* `loss.normalize_depth_loss`: divides the depth residual by the dataset's `depth_meters_stddev` (29.1264 m) before
+  computing L1/L2, so the depth loss is on a comparable scale to cross-entropy under equal loss weights. Without it, an
+  unweighted joint run measurably lost segmentation performance (83.6 → 65.8 mIoU) to the depth task dominating the
+  shared gradient ("negative transfer"); default `true`. Metrics are unaffected, always in meters.
+* Config validation now rejects a `trainer.checkpoint_monitor` whose task isn't in `experiment.tasks`, and a
+  `trainer.checkpoint_mode` that doesn't match the monitored metric's known direction (e.g. `si_log_rmse` needs `min`) —
+  both mistakes silently kept the *worst* checkpoint instead of the best before this check existed.
 
 Known gaps (not addressed here):
 
-* `ModelDeepLabV3PlusMultiTask` (branched), `ModelAdaptiveDepth` (the bin logic) and `SelfAttention` are still template stubs;
-  `SILogLoss` is a stub, so the depth loss is L1/L2 for now.
+* `ModelAdaptiveDepth` (the bin logic) and `SelfAttention` are still template stubs; `SILogLoss` is a stub, so the depth
+  loss is L1/L2 for now.
 * The reported SI-logRMSE in `source/utils/metrics.py` hardcodes lambda = 1 and a x100 scale, and its valid mask has no
   maximum depth; CLAUDE.md asks for lambda as an explicit parameter and a `<= max depth` mask.
 * The depth head is `exp(x)` clamped to [0.1, 300] m and is trained with L1 in meters: far pixels dominate the loss and the

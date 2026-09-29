@@ -141,8 +141,8 @@ ETH CVAIAC course template; dataset class is `miniscapes`, a Synscapes subset). 
 - Tests: `python -m pytest -q` (CPU, ~1 min, synthetic dataset, needs ~1 GB temp disk).
 - Lint/format: TODO (no tooling configured)
 
-Not implemented in the template (TODO stubs): `ModelDeepLabV3PlusMultiTask` (branched), the adaptive-bins part of
-`ModelAdaptiveDepth`, `SelfAttention`, `SILogLoss`.
+Not implemented in the template (TODO stubs): the adaptive-bins part of `ModelAdaptiveDepth`, `SelfAttention`,
+`SILogLoss`. `ModelDeepLabV3PlusMultiTask` (branched) is implemented.
 
 ## Open decisions (to settle together with me)
 

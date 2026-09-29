@@ -102,6 +102,26 @@ def test_joint_model_overfits_a_tiny_dataset(tiny_dataset, tmp_path, monkeypatch
     assert mean(semseg[-10:]) < 0.95 * mean(semseg[:3]), semseg
 
 
+def test_branched_model_runs_and_overfits_a_tiny_dataset(tiny_dataset, tmp_path, monkeypatch, cpu_only):
+    """Shape/contract check (separate semseg+depth heads, correct predictions/ dir) plus the CLAUDE.md
+    smoke test (loss must go down on a handful of images) for the branched architecture."""
+    run_dir = run_training(
+        tiny_dataset, tmp_path, monkeypatch, 'model.model_name=deeplabv3p_multitask',
+        'optimization.num_epochs=40', 'trainer.num_sanity_val_steps=0')
+
+    def mean(values):
+        return sum(values) / len(values)
+
+    total = read_csv_column(run_dir, 'loss_train/total')
+    semseg = read_csv_column(run_dir, 'loss_train/semseg')
+    assert len(total) >= 60
+    assert mean(total[-10:]) < 0.6 * mean(total[:3]), total
+    assert mean(semseg[-10:]) < 0.95 * mean(semseg[:3]), semseg
+
+    for task in ('semseg', 'depth'):
+        assert len(os.listdir(os.path.join(run_dir, 'predictions', task))) == 2
+
+
 def test_depth_loss_normalization_matches_dataset_stddev(tiny_dataset, tmp_path, monkeypatch, cpu_only):
     """loss.normalize_depth_loss divides the depth residual by depth_meters_stddev (29.1264, a fixed
     DatasetMiniscapes constant) before computing L1: it should shrink loss_train/depth by exactly that
