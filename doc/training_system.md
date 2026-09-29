@@ -169,7 +169,7 @@ Logged metrics:
 | `loss_val/<task>`, `loss_val/total` | per epoch on the validation split (same weighting as training) |
 | `metrics_task_semseg/mean_iou`, `metrics_task_semseg/<class name>` | mIoU and per-class IoU from the confusion matrix accumulated over the whole validation set |
 | `metrics_task_depth/*` | `si_log_rmse`, `log_rmse`, `mae`, `rmse`, `rel`, `delta1..3`, ... |
-| `metrics_summary/{semseg,depth,total}` | handout scores `max(mIoU-50, 0)`, `max(50-SILogRMSE, 0)` and their mean over the active tasks |
+| `metrics_summary/{semseg,depth,total}` | internal checkpoint-selection convenience, `max(mIoU-50, 0)`, `max(50-SILogRMSE, 0)` and their mean over the active tasks — not a reported project metric, see section 6 |
 | `trainer/LR` | current learning rate |
 | `imgs_train/batch_crops`, `imgs_val/observed_samples`, `histograms/*` | prediction images (RGB, GT, prediction per task) and depth histograms |
 
@@ -201,9 +201,12 @@ Loss and evaluation as implemented:
   the training loss; `metrics_task_depth/*` are always reported in meters, unaffected.
 * Total: `loss_weight_semseg * CE + loss_weight_depth * depth_loss (+ loss_weight_aux * aux)`. Weighted sum by default; other
   weighting schemes (e.g. learned/uncertainty weighting) are a later ablation, not the default.
-* Checkpoint selection: `trainer.checkpoint_monitor`. The default `metrics_summary/total` is exactly 0 until a task passes
-  50 mIoU (or the depth error drops below 50), so in short or early runs every epoch ties and the first checkpoint is kept.
-  For such runs monitor `metrics_task_semseg/mean_iou` (max) or `metrics_task_depth/si_log_rmse` (min).
+* Checkpoint selection: `trainer.checkpoint_monitor`. `metrics_summary/total` (for joint/branched runs) is an internal
+  convenience so `ModelCheckpoint` has one scalar to compare when mIoU and SI-logRMSE are on different scales and
+  directions — it is not one of this project's reported metrics (those are per-task mIoU and SI-logRMSE, see
+  `doc/descrizione progetto .txt`). It is exactly 0 until a task passes 50 mIoU, so in short or early runs every epoch
+  ties and the first checkpoint is kept; for such runs, or for single-task runs, monitor `metrics_task_semseg/mean_iou`
+  (max) or `metrics_task_depth/si_log_rmse` (min) directly instead.
 * Test split: only predictions are written (no metrics), so the test set is never used for tuning.
 
 ## 7. Tests
